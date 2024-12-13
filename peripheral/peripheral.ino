@@ -1,5 +1,6 @@
 #include <ArduinoBLE.h>
 #include <Arduino_HS300x.h>
+#include <Arduino_APDS9960.h>
 
 #define VALUE_SIZE 20
 
@@ -61,7 +62,7 @@ void loop() {
 
 
     // while the central is connected
-    // update temperature every 200ms
+    // update temperature & proximity every 200ms
     while (central.connected()) {
       long currentMillis = millis();
       if (currentMillis - previousMillis >= 200) {
@@ -86,6 +87,27 @@ void updateTemperature() {
     if (ret >= 0) {
       temperatureCharacteristic.writeValue(buffer);
       oldTemperature = temperature;
+    }
+  }
+}
+
+void updateProximity() {
+  // Read proximity value
+  uint8_t proximity = APDS.readProximity();
+
+  // If the proximity value is valid (within range)
+  if (proximity <= 255) {
+    // Format the proximity value as a string
+    char buffer[VALUE_SIZE];
+    int ret = snprintf(buffer, sizeof(buffer), "%u", proximity); // Convert proximity to string
+
+    if (ret >= 0) {
+      // Print the proximity value to the Serial Monitor
+      Serial.print("Proximity: ");
+      Serial.println(buffer);
+
+      // Send the proximity value over BLE
+      temperatureCharacteristic.writeValue(buffer);
     }
   }
 }

@@ -6,9 +6,14 @@
 
 BLEService temperatureService = BLEService("00000000-5EC4-4083-81CD-A10B8D5CF6EC");
 BLECharacteristic temperatureCharacteristic = BLECharacteristic("00000001-5EC4-4083-81CD-A10B8D5CF6EC", BLERead | BLENotify, VALUE_SIZE);
+BLEService proximityService = BLEService("00000003-5EC4-4083-81CD-A10B8D5CF6EC");
+BLECharacteristic proximityCharacteristic = BLECharacteristic("00000004-5EC4-4083-81CD-A10B8D5CF6EC", BLERead | BLENotify, VALUE_SIZE);
+
 
 // last temperature reading
 int oldTemperature = 0;
+// last proximity reading
+uint8_t oldProximity = 0;
 // last time the temperature was checked in ms
 long previousMillis = 0;
 
@@ -24,27 +29,36 @@ void setup() {
       ;
   }
 
+  if (!APDS.begin()) {
+    Serial.println("Failed to initialize APDS9960.");
+    while (1);
+  }
+
   // initialize the built-in LED pin to indicate when a central is connected
   pinMode(LED_BUILTIN, OUTPUT);
 
   if (!BLE.begin()) {
     Serial.println("starting BLE failed!");
-
-    while (1)
-      ;
+    while (1);
   }
 
   BLE.setLocalName("BLE-TEMP");
   BLE.setDeviceName("BLE-TEMP");
-  // add the temperature characteristic
+
+  // add the temperature & proximity characteristics
   temperatureService.addCharacteristic(temperatureCharacteristic);
-  // add the service
+  proximityService.addCharacteristic(proximityCharacteristic);
+
+  // add temperature & proximity services
   BLE.addService(temperatureService);
+  BLE.addService(proximityService)
+
   // set initial value for this characteristic
   temperatureCharacteristic.writeValue("0.0");
+  proximityCharacteristic.writeValue("0");
+
   // start advertising
   BLE.advertise();
-
   Serial.println("Bluetooth® device active, waiting for connections...");
 }
 
@@ -68,6 +82,7 @@ void loop() {
       if (currentMillis - previousMillis >= 200) {
         previousMillis = currentMillis;
         updateTemperature();
+        updateProximity();
       }
     }
 
@@ -86,6 +101,8 @@ void updateTemperature() {
     int ret = snprintf(buffer, sizeof buffer, "%f", temperature);
     if (ret >= 0) {
       temperatureCharacteristic.writeValue(buffer);
+      Serial.print("Temperature: ");
+      Serial.println(buffer); // Print to Serial for debugging
       oldTemperature = temperature;
     }
   }
@@ -105,9 +122,9 @@ void updateProximity() {
       // Print the proximity value to the Serial Monitor
       Serial.print("Proximity: ");
       Serial.println(buffer);
-
       // Send the proximity value over BLE
-      temperatureCharacteristic.writeValue(buffer);
+      proximityCharacteristic.writeValue(buffer);
+      oldProximity = proximity;
     }
   }
 }

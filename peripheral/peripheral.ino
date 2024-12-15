@@ -18,49 +18,55 @@ uint8_t oldProximity = 0;
 long previousMillis = 0;
 
 void setup() {
-  // initialize serial communication
+  // Initialize serial communication for debugging
   Serial.begin(9600);
-  while (!Serial)
-    ;
+  while (!Serial); // Wait for Serial Monitor readiness
+  Serial.println("Initializing sensors and BLE...");
 
+  // Initialize the temperature sensor (HS300x)
   if (!HS300x.begin()) {
-    Serial.println("Failed to initialize HS300x.");
-    while (1)
-      ;
+    Serial.println("Failed to initialize HS300x. Check connections.");
+    while (1); // Halt execution if initialization fails
   }
+  Serial.println("HS300x initialized successfully.");
 
+  // Initialize the proximity sensor (APDS9960)
   if (!APDS.begin()) {
-    Serial.println("Failed to initialize APDS9960.");
-    while (1);
+    Serial.println("Failed to initialize APDS9960. Check connections.");
+    while (1); // Halt execution if initialization fails
   }
+  Serial.println("APDS9960 initialized successfully.");
 
-  // initialize the built-in LED pin to indicate when a central is connected
+  // Initialize the built-in LED pin to indicate when a central is connected
   pinMode(LED_BUILTIN, OUTPUT);
 
+  // Initialize BLE
   if (!BLE.begin()) {
-    Serial.println("starting BLE failed!");
-    while (1);
+    Serial.println("Failed to start BLE. Check configuration.");
+    while (1); // Halt execution if BLE initialization fails
   }
 
+  // Set BLE device and service names
   BLE.setLocalName("BLE-TEMP");
   BLE.setDeviceName("BLE-TEMP");
 
-  // add the temperature & proximity characteristics
+  // Add characteristics to their respective services
   temperatureService.addCharacteristic(temperatureCharacteristic);
   proximityService.addCharacteristic(proximityCharacteristic);
 
-  // add temperature & proximity services
+  // Add services to the BLE stack
   BLE.addService(temperatureService);
-  BLE.addService(proximityService)
+  BLE.addService(proximityService);
 
-  // set initial value for this characteristic
+  // Set initial values for characteristics
   temperatureCharacteristic.writeValue("0.0");
   proximityCharacteristic.writeValue("0");
 
-  // start advertising
+  // Start BLE advertising
   BLE.advertise();
-  Serial.println("Bluetooth® device active, waiting for connections...");
+  Serial.println("BLE advertising started. Device is ready for connections.");
 }
+
 
 void loop() {
   // wait for a Bluetooth® Low Energy central
@@ -99,6 +105,7 @@ void updateTemperature() {
   if (temperature != oldTemperature) {
     char buffer[VALUE_SIZE];
     int ret = snprintf(buffer, sizeof buffer, "%f", temperature);
+
     if (ret >= 0) {
       temperatureCharacteristic.writeValue(buffer);
       Serial.print("Temperature: ");
@@ -109,22 +116,41 @@ void updateTemperature() {
 }
 
 void updateProximity() {
-  // Read proximity value
-  uint8_t proximity = APDS.readProximity();
+  // Check if proximity data is available
+  if (APDS.proximityAvailable()) {
+    // Read the proximity value
+    int proximity = APDS.readProximity();
 
-  // If the proximity value is valid (within range)
-  if (proximity <= 255) {
-    // Format the proximity value as a string
-    char buffer[VALUE_SIZE];
-    int ret = snprintf(buffer, sizeof(buffer), "%u", proximity); // Convert proximity to string
+    if (proximity == -1) {
+      Serial.println("Proximity read error.");
+      return; // Exit if the reading is invalid
+    }
 
-    if (ret >= 0) {
-      // Print the proximity value to the Serial Monitor
-      Serial.print("Proximity: ");
-      Serial.println(buffer);
-      // Send the proximity value over BLE
-      proximityCharacteristic.writeValue(buffer);
-      oldProximity = proximity;
+    // Check for significant changes to reduce BLE updates
+    if (proximity != oldProximity) {
+      char buffer[VALUE_SIZE];
+      int ret = snprintf(buffer, sizeof(buffer), "%u", proximity); // Convert proximity to string
+
+      if (ret >= 0) {
+        // Send proximity value over BLE
+        proximityCharacteristic.writeValue(buffer);
+
+        // Print proximity and thresholds to Serial Monitor
+        Serial.print("Proximity: ");
+        Serial.println(proximity);
+
+        if (proximity > 150) {
+          Serial.println("Status: Far");
+        } else if (proximity > 50 && proximity <= 150) {
+          Serial.println("Status: Medium");
+        } else {
+          Serial.println("Status: Close");
+        }
+
+        // Update the last known proximity value
+        oldProximity = proximity;
+      }
     }
   }
 }
+

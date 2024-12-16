@@ -64,7 +64,7 @@ void setup() {
 
   // Start BLE advertising
   BLE.advertise();
-  Serial.println("BLE advertising started. Device is ready for connections.");
+  Serial.println("The Bluetooth Device is ready to pair.");
 }
 
 
